@@ -9,12 +9,12 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-// 2. Configura a conexão com o seu banco de dados Supabase via variáveis de ambiente
-const supabaseUrl = process.env.SUPABASE_URL || "";
-const supabaseKey = process.env.SUPABASE_ANON_KEY || "";
+// 2. Configura a conexão direta com o seu banco de dados Supabase
+const supabaseUrl = "https://fukhbvefsarauphaoogn.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1a2hodmVmc2FyYXVwaGFvb2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTIyMTQsImV4cCI6MjA5ODI2ODIxNH0.CJQdlvRHh7a3vbyeo2iSZ0giHtf2nkuMRc6NX5ig9xA";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 3. Cadastra a ferramenta de estoque
+// 3. Cadastra a ferramenta de estoque para o Claude ler
 server.tool(
   "verificar_estoque",
   "Busca produtos no estoque da loja de presentes. Permite filtrar por nome do produto.",
