@@ -1,6 +1,6 @@
 {
   "name": "stockly-ai-mcp-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP Server para conectar o Claude via Render",
   "main": "dist/server.js",
   "type": "module",
