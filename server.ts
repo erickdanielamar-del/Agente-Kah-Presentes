@@ -13,14 +13,13 @@ import { z } from "zod";
 // 1. Inicializa o servidor MCP
 const server = new McpServer({
   name: "Agente Kah Presentes",
-  version: "1.0.1",
+  version: "1.0.2",
 });
 
-// 2. Configura a conexão com o Supabase via variáveis de ambiente
-//    IMPORTANTE: configure SUPABASE_URL e SUPABASE_ANON_KEY no painel do Render
-//    (Settings > Environment), nunca hardcoded no código.
+// 2. Configura a conexão com o Supabase e filtros via variáveis de ambiente
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const companyId = process.env.COMPANY_ID; // Nova variável de segurança
 
 if (!supabaseUrl || !supabaseKey) {
   console.error(
@@ -29,12 +28,18 @@ if (!supabaseUrl || !supabaseKey) {
   process.exit(1);
 }
 
+if (!companyId) {
+  console.warn(
+    "[AVISO] COMPANY_ID não configurada. O agente pode não conseguir ler os dados devido às políticas de RLS ou misturar dados de inquilinos."
+  );
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 3. Cadastra a ferramenta de estoque
+// 3. Cadastra a ferramenta de estoque corrigida
 server.tool(
   "verificar_estoque",
-  "Busca produtos no estoque da loja de presentes. Se 'nome' for informado, filtra por produtos cujo nome contenha esse termo (busca parcial, sem diferenciar maiúsculas/minúsculas). Se omitido, retorna todos os produtos.",
+  "Busca produtos no estoque da Kah Presentes. Se 'nome' for informado, filtra por produtos cujo nome contenha esse termo (busca parcial, sem diferenciar maiúsculas/minúsculas). Se omitido, retorna todos os produtos.",
   {
     nome: z
       .string()
@@ -43,9 +48,15 @@ server.tool(
   },
   async ({ nome }) => {
     try {
+      // Corrigido para as colunas reais: sale_price e stock_quantity
       let query = supabase
         .from("products")
-        .select("id, name, description, price, stock");
+        .select("id, name, description, sale_price, stock_quantity, company_id");
+
+      // Aplica a trava de segurança por empresa se o COMPANY_ID estiver configurado
+      if (companyId) {
+        query = query.eq("company_id", companyId);
+      }
 
       if (nome && nome.trim().length > 0) {
         query = query.ilike("name", `%${nome.trim()}%`);
@@ -72,10 +83,11 @@ server.tool(
         return { content: [{ type: "text", text: msg }] };
       }
 
+      // Mapeamento corrigido com os nomes de campos reais do banco do Stockly
       const listaProdutos = data
         .map(
           (p) =>
-            `- *${p.name}*: R$ ${p.price} | Qtd: ${p.stock} unidades\n  Descrição: ${p.description || "Sem descrição"}`
+            `- *${p.name}*: R$ ${p.sale_price} | Qtd: ${p.stock_quantity} unidades\n  Descrição: ${p.description || "Sem descrição"}`
         )
         .join("\n");
 
@@ -88,7 +100,6 @@ server.tool(
         ],
       };
     } catch (err: any) {
-      // Log completo no servidor, incluindo a causa real do erro (DNS, timeout, etc.)
       console.error("[verificar_estoque] erro interno:", err);
       console.error("[verificar_estoque] causa:", err?.cause ?? "sem cause disponível");
       return {
