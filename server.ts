@@ -1,7 +1,14 @@
+// Fix para o bug clássico "TypeError: fetch failed" em Node.js no Render:
+// o Node tenta resolver DNS por IPv6 primeiro, e a rede do Render frequentemente
+// falha nessa rota ao conectar no Supabase. Forçar IPv4 resolve na maioria dos casos.
+import dns from "node:dns";
+dns.setDefaultResultOrder("ipv4first");
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
 
 // 1. Inicializa o servidor MCP
 const server = new McpServer({
@@ -9,32 +16,60 @@ const server = new McpServer({
   version: "1.0.1",
 });
 
-// 2. Configura a conexão direta com o seu banco de dados Supabase
-const supabaseUrl = "https://fukhbvefsarauphaoogn.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1a2hodmVmc2FyYXVwaGFvb2duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTIyMTQsImV4cCI6MjA5ODI2ODIxNH0.CJQdlvRHh7a3vbyeo2iSZ0giHtf2nkuMRc6NX5ig9xA";
+// 2. Configura a conexão com o Supabase via variáveis de ambiente
+//    IMPORTANTE: configure SUPABASE_URL e SUPABASE_ANON_KEY no painel do Render
+//    (Settings > Environment), nunca hardcoded no código.
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error(
+    "[FATAL] SUPABASE_URL ou SUPABASE_ANON_KEY não configuradas nas env vars do Render."
+  );
+  process.exit(1);
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 3. Cadastra a ferramenta de estoque para o Claude ler
+// 3. Cadastra a ferramenta de estoque
 server.tool(
   "verificar_estoque",
-  "Busca produtos no estoque da loja de presentes. Permite filtrar por nome do produto.",
-  {},
-  async () => {
+  "Busca produtos no estoque da loja de presentes. Se 'nome' for informado, filtra por produtos cujo nome contenha esse termo (busca parcial, sem diferenciar maiúsculas/minúsculas). Se omitido, retorna todos os produtos.",
+  {
+    nome: z
+      .string()
+      .optional()
+      .describe("Termo para filtrar produtos pelo nome, ex: 'chaveiro'"),
+  },
+  async ({ nome }) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("products")
         .select("id, name, description, price, stock");
 
+      if (nome && nome.trim().length > 0) {
+        query = query.ilike("name", `%${nome.trim()}%`);
+      }
+
+      const { data, error } = await query;
+
       if (error) {
+        console.error("[verificar_estoque] erro do Supabase:", error);
         return {
-          content: [{ type: "text", text: `Erro ao acessar o banco de dados: ${error.message}` }],
+          content: [
+            {
+              type: "text",
+              text: `Erro ao acessar o banco de dados: ${error.message}`,
+            },
+          ],
         };
       }
 
       if (!data || data.length === 0) {
-        return {
-          content: [{ type: "text", text: "Nenhum produto cadastrado no estoque atualmente." }],
-        };
+        const msg = nome
+          ? `Nenhum produto encontrado com o nome "${nome}".`
+          : "Nenhum produto cadastrado no estoque atualmente.";
+        return { content: [{ type: "text", text: msg }] };
       }
 
       const listaProdutos = data
@@ -53,16 +88,23 @@ server.tool(
         ],
       };
     } catch (err: any) {
+      // Log completo no servidor, incluindo a causa real do erro (DNS, timeout, etc.)
+      console.error("[verificar_estoque] erro interno:", err);
+      console.error("[verificar_estoque] causa:", err?.cause ?? "sem cause disponível");
       return {
-        content: [{ type: "text", text: `Erro interno no servidor MCP: ${err.message}` }],
+        content: [
+          {
+            type: "text",
+            text: `Erro interno no servidor MCP: ${err.message}`,
+          },
+        ],
       };
     }
   }
 );
 
-// 4. Configura o servidor Express (Padrão original com rotas separadas)
+// 4. Configura o servidor Express
 const app = express();
-
 let transport: SSEServerTransport | null = null;
 
 app.get("/sse", async (req, res) => {
