@@ -9,19 +9,18 @@ const server = new McpServer({
   version: "1.0.0",
 });
 
-// 2. Configura a conexão com o seu banco de dados Supabase
+// 2. Configura a conexão com o seu banco de dados Supabase via variáveis de ambiente
 const supabaseUrl = process.env.SUPABASE_URL || "";
 const supabaseKey = process.env.SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 3. Cadastra a ferramenta de estoque para o Claude ler
+// 3. Cadastra a ferramenta de estoque
 server.tool(
   "verificar_estoque",
   "Busca produtos no estoque da loja de presentes. Permite filtrar por nome do produto.",
   {},
   async () => {
     try {
-      // Busca todos os produtos na tabela do Supabase
       const { data, error } = await supabase
         .from("products")
         .select("id, name, description, price, stock");
@@ -38,7 +37,6 @@ server.tool(
         };
       }
 
-      // Formata a lista de produtos de um jeito amigável para a IA ler
       const listaProdutos = data
         .map(
           (p) =>
@@ -62,30 +60,27 @@ server.tool(
   }
 );
 
-// 4. Configura o servidor Express preparado para o Lovable
+// 4. Configura o servidor Express (Padrão original com rotas separadas)
 const app = express();
-app.use(express.json());
 
 let transport: SSEServerTransport | null = null;
 
-// Rota unificada para o Lovable usar tanto o GET quanto o POST no mesmo link
 app.get("/sse", async (req, res) => {
-  console.log("Recebida conexão GET em /sse. Inicializando transporte...");
-  transport = new SSEServerTransport("/sse", res);
+  console.log("Conexão GET recebida em /sse");
+  transport = new SSEServerTransport("/messages", res);
   await server.connect(transport);
 });
 
-app.post("/sse", async (req, res) => {
-  console.log("Recebida mensagem POST em /sse.");
+app.post("/messages", async (req, res) => {
+  console.log("Mensagem POST recebida em /messages");
   if (transport) {
     await transport.handlePostMessage(req, res);
   } else {
-    res.status(400).send("Transporte SSE não inicializado. Faça uma requisição GET primeiro.");
+    res.status(400).send("Transporte não inicializado");
   }
 });
 
-// 5. Inicia o servidor na nuvem
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`Servidor rodando com sucesso na porta ${port}`);
+  console.log(`Servidor rodando perfeitamente na porta ${port}`);
 });
