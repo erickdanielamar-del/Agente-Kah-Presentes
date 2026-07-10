@@ -1,21 +1,22 @@
 {
   "name": "stockly-ai-mcp-server",
   "version": "1.0.0",
-  "description": "MCP Server para conectar o Claude ao banco de dados do Stockly AI via Supabase",
+  "description": "MCP Server para conectar o Claude via Render",
   "main": "dist/server.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "ts-node server.ts"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
     "@supabase/supabase-js": "^2.43.4",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }
