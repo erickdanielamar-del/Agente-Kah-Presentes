@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 // 1. Inicializa o servidor MCP
 const server = new McpServer({
   name: "Agente Kah Presentes",
-  version: "1.0.0",
+  version: "1.0.1",
 });
 
 // 2. Configura a conexão direta com o seu banco de dados Supabase
